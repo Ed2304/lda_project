@@ -23,6 +23,8 @@ library(broom)
 
 
 ```{r}
+setwd("./../../data")
+
 filename <- "alzheimer25.sas7bdat"
 
 dat <- read_sas(filename)
