@@ -649,6 +649,8 @@ anova(m1, m5)  # we can't compare the models anymore due to same nr of df's
 getVarCov(m5)
 
 
+m1 <- m5  # autoregressive model
+
 ```
 
 Model 2 with correlated (unstructured) errors improves fit -> We keep the model.
@@ -902,7 +904,7 @@ cdrsb, taupet, abpet
 ########
 
 m0 <- lme(
-  fixed =  bprs ~ time + sex + age  + trial + edu + bmi + job + adl + wzc + cdrsb + abpet * taupet, 
+  fixed =  bprs ~ time + sex + age + trial + edu + bmi + job + adl + wzc + cdrsb + abpet * taupet, 
   random = ~ 1 | patid/trial,
   correlation = corCompSymm(form = ~ 1 | patid/trial),
   weights = varIdent(form = ~ 1 | time_num),
