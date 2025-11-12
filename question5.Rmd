@@ -1,1 +1,157 @@
+---
+title: "Question 5"
+author: "Rafke Niemans"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE}
+libraries <- c(
+  "haven", "dplyr", "tidyr", "ggplot2", "reshape2",
+  "viridis", "knitr", "kableExtra", "nlme"
+)
+
+dat <- read_sas("alzheimer25.sas7bdat")
+```
+
+```{r}
+reshape_dat <- function(dat) {
+    dat_long <- dat %>%
+        pivot_longer(
+            cols = matches("^(bprs|cdrsb|abpet|taupet)\\d+"),
+            names_to = c(".value", "time"),
+            names_pattern = "(.+)(\\d+)"
+        )
+    dat_long
+}
+
+to_factor <- function(dat_long) {
+
+    dat_long <- dat_long %>%
+        mutate(
+            time = as.factor(time),  # coded 0-6
+            sex = as.factor(sex),
+            edu = as.factor(edu),
+            trial = as.factor(trial),
+            job = as.factor(job),
+            wzc = as.factor(wzc),
+            time_num = as.numeric(time)  # coded 1-7
+        )
+    dat_long
+}
+dat_long <- reshape_dat(dat)
+dat_long <- to_factor(dat_long)
+dat_long <- dat_long %>%
+  mutate(year_num = as.numeric(as.character(trial)))
+```
+
+## Q5. 
+
+Formulate a plausible random-effects model. Fit your model, and compare the results with those from the multivariate model. 
+
+
+```{r}
+m1 <- lm(bprs ~ year_num * (sex + age + wzc + adl + job), data = dat_long) 
+m2 <- lmer(bprs ~ year_num * (sex + age + wzc + adl + job) + (1 | patid), data = dat_long, REML = TRUE) # Is var(slope) and cor(slope,intercept) = 0? 
+m3 <- lmer(bprs ~ year_num * (sex + age + wzc + adl + job) + (year_num | patid), data = dat_long, REML = TRUE) # model with random intercept and slope
+
+results <- data.frame(
+  Model = c("m1", "m2", "m3"),
+  AIC = AIC(m1, m2, m3),
+  BIC = BIC(m1, m2, m3)
+)
+
+
+print(results)
+
+```
+
+We proceed with the random-effects structure of model m3 
+
+
+```{r lmm}
+# Scaled covariates help convergence
+dat_long$age_s <- scale(dat_long$age)
+dat_long$bmi_s <- scale(dat_long$bmi)
+dat_long$adl_s <- scale(dat_long$adl)
+dat_long <- dat_long %>%
+  mutate(year_num = as.numeric(as.character(trial)))
+
+form_fixed <- bprs ~ year_num +
+  age_s + sex + edu + bmi_s + job + adl_s + wzc +
+  cdrsb + abpet + taupet 
+
+ctrl <- lmeControl(opt = "nlminb", msMaxIter = 500, msMaxEval = 800, returnObject = TRUE)
+
+# Model 1: Random intercept and slope, NO residual correlation
+m_no_corr <- lme(
+  fixed = form_fixed,
+  data = dat_long,
+  random = ~ year_num | patid, 
+  method = "REML",
+  na.action = na.omit 
+)
+
+# Model 2: Same random effects but with Compound Symmetry residual correlation 
+m_compsymm<- lme(
+  fixed = form_fixed,
+  random = ~1 | patid,
+  correlation = corCompSymm(form = ~as.numeric(year_num) | patid),
+  data = dat_long,
+  method = "REML",
+  na.action = na.omit,
+  control = ctrl
+)
+
+dat_long_unique <- dat_long %>%
+  group_by(patid) %>%
+  filter(n_distinct(year_num) > 1) %>%
+  ungroup()
+
+# Model 3: Same random effects, but WITH AR(1) residual correlation
+m_ar1 <- lme(
+  fixed = form_fixed,
+  data = dat_long_unique,
+  random = ~ year_num | patid,
+  correlation = corAR1(form = ~ year_num | patid),
+  method = "REML",
+  na.action = na.omit,
+  control = ctrl
+)
+
+anova(m_no_corr, m_ar1)
+anova(m_no_corr, m_compsymm)
+anova(m_compsymm, m_ar1)
+
+```
+
+If singular, the random intercept adds no variance. 
+
+```{r}
+vcov(m_no_corr)
+vcov(m_compsymm)
+# vcov(m_ar1)
+```
+```{r model results}
+#summary(m_ar1)
+summary(m_no_corr)
+summary(m_compsymm)
+```
+
+
+Inter-individual variability is almost fully explained by these predictors hence the random intercept variance collapses to zero. That means it falls back to the multivariate OLS in practical terms. Residual variance (≈147) reflects large within-person or unexplained temporal fluctuation. 
+
+
+Check the appropriateness of your random-effects model. Calculate the subject-specific intercepts/slopes and compare them to the ones you obtained from a two-stage analysis. What do you conclude?
+
+```{r subject specific intercepts/slopes}
+m_RI  <- update(m_full, random = list(institute_id = pdDiag(~1), patid = pdDiag(~ 1)), method = "ML")
+m_RIRS <- update(m_full, random = list(institute_id = pdDiag(~1), patid = pdSymm(~ year)),method = "ML")
+anova(m_RI, m_RIRS)  # LRT; boundary -> p-value conservative; for exact use RLRsim::exactRLRT
+
+m_noCenter <- update(m_full, random = list(patid = pdSymm(~ year)), method = "ML")
+anova(m_noCenter, update(m_full, method = "ML"))
+```
+
 
