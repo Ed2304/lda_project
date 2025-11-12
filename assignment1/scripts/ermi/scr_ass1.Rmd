@@ -924,4 +924,6 @@ Now lets look at our random effects:
 Let's look at the coefficient estimates in the RE model compared to the 2-Stage Model.
 ```{r}
 
+
+
 ```
