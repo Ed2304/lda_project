@@ -11,8 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Conclusions at the bottom of the page 
 
-To add: semivariogram (used to check for the right residual correlation structure)
-
 
 ```{r}
 # List of required packages
@@ -115,7 +113,8 @@ ggplot(mean_var_summary, aes(x = year, y = mean_value)) +
 
 ```
 
-## Correlation matrix of continuous features
+
+## Correlation matrix of continuous features at baseline
 
 ```{r}
 
@@ -137,11 +136,11 @@ ggplot(melted_M, aes(x = Var1, y = Var2, fill = value)) +
   scale_fill_gradient2(
     low = "#4575b4", mid = "white", high = "#d73027", midpoint = 0,
     limits = c(-1, 1),
-    name = "Correlation"
+    name = "Correlation (-1 : 1)"
   ) +
   coord_fixed() + 
   labs(
-    title = "Correlation Heatmap",
+    title = "Correlation Heatmap of Continuous Features at Baseline ",
     x = NULL, y = NULL
   ) +
   theme_minimal(base_size = 14) +
@@ -157,6 +156,35 @@ ggplot(melted_M, aes(x = Var1, y = Var2, fill = value)) +
   )
 
 ```
+
+## Correlation matrix of bprs values 
+```{r}
+desired_order <- c("bprs0","bprs1","bprs2","bprs3","bprs4","bprs5","bprs6")
+
+M <- cor(dat[, desired_order],
+         use = "pairwise.complete.obs")
+
+
+melted_M <- reshape2::melt(M)
+
+melted_M$Var1 <- factor(melted_M$Var1, levels = desired_order)
+melted_M$Var2 <- factor(melted_M$Var2, levels = desired_order)
+
+
+ggplot(melted_M, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white", linewidth = 0.4) +  # thin white grid lines
+  scale_fill_gradient2(
+    low = "#4575b4", mid = "white", high = "#d73027", midpoint = 0.9,
+    limits = c(0.8, 1),
+    name = "Correlation (0.8 : 1)"
+  ) +
+  coord_fixed() + 
+  labs(
+    title = "Correlation Heatmap of BPRS scores",
+    x = NULL, y = NULL
+  )
+```
+
 
 
 ## Distribution of Age at baseline by sex
@@ -293,15 +321,26 @@ ggplot(dat_long, aes(x = time, y = bprs, color = age)) +
     y = 'BPRS Score'
   )
 
-# Mean BPRS by age (continuous gradient)
-ggplot(dat_long, aes(x = time, y = bprs, color = age, group=age)) + 
-  stat_summary(fun = mean, geom = "line", size = 1) +
+
+set.seed(123) 
+
+sample_ids <- dat_long %>%
+  distinct(patid) %>%
+  sample_n(150) %>%
+  pull(patid)
+
+dat_long_sample <- dat_long %>%
+  filter(patid %in% sample_ids)
+
+# Individual trajectories
+ggplot(dat_long_sample, aes(x = time, y = bprs, group = patid, color = age)) +
+  geom_line(alpha = 0.5, linewidth = 0.8) +
   scale_color_viridis_c(name = "Age") +
   theme_minimal() +
   labs(
-    title = 'Average BPRS Score as Function of Time and Age',
-    x = 'Year',
-    y = 'BPRS Score'
+    title = "Individual BPRS Trajectories (Sample of 400 Patients)",
+    x = "Year",
+    y = "BPRS Score"
   )
 
 # Dropouts by age
@@ -321,13 +360,36 @@ dropouts_age %>%
 ## EDA by wzc
 ```{r}
 
-
+# Individual points
 ggplot(dat_long, aes(x = time, y = bprs, color = wzc)) + 
   geom_jitter(alpha = 0.6) + 
   scale_color_manual(values = c("#4575b4", "#d73027")) +
   theme_minimal() + 
   labs(
     title = 'BPRS Score as Function of Time and WZC',
+    x = 'Year',
+    y = 'BPRS Score'
+  )
+
+
+set.seed(123) 
+
+sample_ids <- dat_long %>%
+  distinct(patid) %>%
+  sample_n(150) %>%
+  pull(patid)
+
+dat_long_sample <- dat_long %>%
+  filter(patid %in% sample_ids)
+
+# Individual trajectories
+ggplot(dat_long, aes(x = time, y = bprs, color = wzc, group = patid)) + 
+  geom_line(alpha = 0.4) +
+  geom_point(alpha = 0.6) +
+  scale_color_manual(values = c("#4575b4", "#d73027")) +
+  theme_minimal() + 
+  labs(
+    title = 'Individual BPRS Score Profiles Over Time by Sex',
     x = 'Year',
     y = 'BPRS Score'
   )
@@ -426,6 +488,50 @@ ggplot(plot_data, aes(x = year, y = count)) +
     y = "Number of available observations"
   )
 ```
+## Correlation between dropout rate and age and bprs at baseline
+
+```{r}
+dat$NAs_1 <- as.numeric(is.na(dat$bprs1))
+dat$NAs_2 <- as.numeric(is.na(dat$bprs2))
+dat$NAs_3 <- as.numeric(is.na(dat$bprs3))
+dat$NAs_4 <- as.numeric(is.na(dat$bprs4))
+dat$NAs_5 <- as.numeric(is.na(dat$bprs5))
+dat$NAs_6 <- as.numeric(is.na(dat$bprs6))
+
+corr_data <- dat %>%
+  select(age, bprs0, NAs_1:NAs_6)
+
+cor_matrix <- cor(corr_data, use="pairwise.complete")
+
+melted <- melt(cor_matrix)
+
+ggplot(melted, aes(x=Var1, y=Var2, fill=value)) +
+  geom_tile(color = "white", linewidth = 0.4) +  # thin white grid lines
+  scale_fill_gradient2(
+    low = "#4575b4", mid = "white", high = "#d73027", midpoint = 0,
+    limits = c(-1, 1),
+    name = "Correlation (-1 : 1)"
+  ) +
+  coord_fixed() + 
+  labs(
+    title = "Correlation Heatmap ",
+    subtitle = "Number of Dropouts with Age and BPRS at Baseline",
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 11, face = "bold"),
+    axis.text.y = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 13, hjust = 0.5, color = "gray30"),
+    panel.grid = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 10)
+  )
+
+```
+
 
 ```{r}
 # Paired t-tests baseline (0) vs final (6)
@@ -435,6 +541,29 @@ t.test(dat$abpet0, dat$abpet6, paired = TRUE)
 t.test(dat$taupet0,dat$taupet6,paired = TRUE)
 ```
 
+## Preliminary OLS model
+```{r}
+# We fit a standard linear model (OLS) ignoring the patient-specific correlations.
+preliminary_ols_model <- lm(bprs ~ time_num + sex + age + wzc + adl, 
+                             data = dat_long, na.action = na.exclude)
+
+
+# The residuals represent the part of the BPRS score that is NOT explained by the average trend.
+# In theory, this is what's left over for the random effects and residual error to explain.
+df_long$ols_residuals <- residuals(preliminary_ols_model)
+
+# If the random effects were just a random intercept (b_0i), these profiles should be flat but
+# shifted up or down for each patient, with random noise.
+# If there is a random slope (b_1i), we would expect to see individual slopes in these residual profiles.
+
+ggplot(df_long, aes(x = year_numeric, y = ols_residuals, group = patid)) +
+  geom_line(alpha = 0.3) + 
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "OLS Residual Profiles for Each Patient",
+       x = "Year (Numeric)",
+       y = "OLS Residuals") +
+  theme_minimal()
+```
 
 # Conclusion 
 
@@ -442,9 +571,11 @@ Summarize your conclusions. What are the implications with respect to
 statistical modeling ? 
 
 
-From our exploratory data analysis, we observe that each patient’s clinical and neuroimaging features were measured up to six times, corresponding to annual follow-ups over six years. The variable of interest, BPRS, which measures the severity of psychiatric symptoms, shows a linear trend over time. The variance appears to remain constant across the years.
+From our exploratory data analysis, we observe that each patient’s clinical and neuroimaging features were measured up to six times, corresponding to annual follow-ups over six years. The variable of interest, BPRS, which measures the severity of psychiatric symptoms, shows a linear trend over time. The variance appears to remain more or less constant across the years.
 
-Among the four measures, BPRS shows by far the greatest change across time. This indicates that behavioral and psychiatric deterioration dominates the longitudinal trajectory, whereas cognitive decline (CDRSB) is more moderate, and biological markers (ABPET, TAUPET) show much smaller absolute shifts. All variables show statistically significant changes, but their effect sizes differ dramatically, emphasizing that statistical significance does not necessarily imply clinical importance.
+Among the four measures, BPRS shows by far the greatest change across time. This indicates that behavioral and psychiatric deterioration dominates the longitudinal trajectory, whereas cognitive decline (CDRSB) is more moderate, and biological markers (ABPET, TAUPET) show much smaller absolute shifts. All variables show statistically significant changes, but their effect sizes differ dramatically, emphasizing that statistical significance does not necessarily imply clinical importance* 
+
+*(Matteo: I am not sure anymore about this sentence, because we have no idea how clinically relevant is a big change in one feature. As in, maybe a smaller absolute change in ABPET has much stronger clinical effects than a bigger absolute change in BPRS). 
 
 The correlation matrix indicates that BPRS at baseline is positively correlated with age, WZC, and other clinical features, while it is negatively correlated with job, ADL, trial, and income. However, further exploration suggests that age is likely the main driver of variation in BPRS.
 
@@ -452,10 +583,10 @@ A spurious association is observed between sex and BPRS: women appear to have hi
 
 The longitudinal plots confirm a positive, linear association between age and BPRS. There is also considerable attrition over time, with the number of observations decreasing from 1,253 at baseline to 511 at year six. Approximately 63% of the dropouts are women, likely due to their higher baseline age, which may have led to faster progression of psychiatric symptoms or inability to continue participation. It is plausible that participants with high baseline BPRS scores either died or became too impaired to remain in the study.
 
-This pattern of dropout explains why the overall variance of BPRS appears constant over time. Although sample size decreases, the reduction in the range of BPRS values among remaining participants likely counterbalances the expected increase in variance.
+This pattern of dropout might explain why the overall variance of BPRS appears constant over time. Although sample size decreases, the reduction in the range of BPRS values among remaining participants likely counterbalances the expected increase in variance.
 
-Based on these findings, a linear mixed-effects model is the most appropriate statistical approach for analyzing this longitudinal dataset. Time and age should be included as fixed effects, with patient ID modeled as a random effect to account for repeated measures within individuals. Since patients are also nested within trials, trial can be included as an additional random effect. The exploratory analysis suggests that random intercepts are necessary, as individuals differ substantially in baseline BPRS levels. However, the approximately parallel trajectories across time indicate that random slopes may not be required, though this will be verified through formal hypothesis testing.
+Based on these findings, a linear mixed-effects model is the most appropriate statistical approach for analyzing this longitudinal dataset. Time and age should be included as fixed effects, with patient ID modeled as a random effect to account for repeated measures within individuals. Since patients are also nested within trials, trial can be included as an additional random effect. The residuals extracted from the OLS model follow this formula: $r_i = y_i - X_i\hat{\beta}_{OLS} \approx Z_ib_i + \epsilon_i$, which implies that after taking into account the fixed effects, any variance left is the sum of subject-specific effects plus any residual variance. From the spaghetti plot of the residuals we can confirm that different subjects need different intercepts. This plot also reveals the need of subject-specific slopes, as some subjects' bprs score increase faster or slower than the average over time. The fact that the residuals cluster around 0 shows that the distributional assumption $E \left( \begin{pmatrix} b_{0i} \\ b_{1i} \end{pmatrix} \right) = \begin{pmatrix} 0 \\ 0 \end{pmatrix}$ is met. 
 
-Finally, given that the data are collected at regular time intervals, it is reasonable to assume an autoregressive correlation structure for the residuals, capturing the expected correlation between adjacent time points.
+Finally, given that the data are collected at regular time intervals, it is reasonable to assume an autoregressive correlation structure for the residual variance, capturing the expected correlation between adjacent time points (plot a semivariogram once the linear mixed model is fitted).
 
 
